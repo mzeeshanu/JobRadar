@@ -1,0 +1,114 @@
+@rendermode InteractiveServer
+
+<MudPaper Elevation="3" Class="pa-4 mb-3" Style="@_cardStyle"
+          @onmouseenter="() => _hovered = true"
+          @onmouseleave="() => _hovered = false">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">
+        <!-- Left: title + company -->
+        <div style="flex:1;min-width:0">
+            <MudText Typo="Typo.h6" Style="color:#E0E0FF;font-weight:700;margin-bottom:2px">
+                @Job.Title
+            </MudText>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <MudIcon Icon="@Icons.Material.Filled.Business" Size="Size.Small" Style="color:#9E9EC8" />
+                <MudText Typo="Typo.body2" Style="color:#9E9EC8">@(Job.Company?.Name ?? "Unknown")</MudText>
+
+                @if (!string.IsNullOrEmpty(Job.Location))
+                {
+                    <MudIcon Icon="@Icons.Material.Filled.LocationOn" Size="Size.Small" Style="color:#9E9EC8" />
+                    <MudText Typo="Typo.body2" Style="color:#9E9EC8">@Job.Location</MudText>
+                }
+
+                @if (Job.IsRemote)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Filled"
+                             Style="height:20px;font-size:.7rem">Remote</MudChip>
+                }
+                @if (!Job.IsLocalPosition)
+                {
+                    <MudTooltip Text="This role is based outside the US — the company is local but the position is not">
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                                 Style="height:20px;font-size:.7rem;color:#F59E0B;border-color:#F59E0B88">
+                            ⚠ Not local
+                        </MudChip>
+                    </MudTooltip>
+                }
+            </div>
+        </div>
+
+        <!-- Right: level badge + apply button -->
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px">
+            <MudChip T="string" Size="Size.Small" Style="@($"background:{_accentColor}22;color:{_accentColor};font-weight:600")">
+                @(Job.ExperienceLevel ?? "Unknown")
+            </MudChip>
+            @if (!string.IsNullOrEmpty(Job.ApplyUrl))
+            {
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                           Href="@Job.ApplyUrl" Target="_blank"
+                           EndIcon="@Icons.Material.Filled.OpenInNew"
+                           Style="border-radius:20px;font-size:.75rem">
+                    Apply
+                </MudButton>
+            }
+        </div>
+    </div>
+
+    <!-- Skills -->
+    @if (Job.Skills.Count > 0)
+    {
+        <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px">
+            @foreach (var skill in Job.Skills.Take(8))
+            {
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                         Style="color:#6C63FF;border-color:#6C63FF44;font-size:.7rem;height:22px">
+                    @skill
+                </MudChip>
+            }
+            @if (Job.Skills.Count > 8)
+            {
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Text"
+                         Style="color:#9E9EC8;font-size:.7rem;height:22px">
+                    +@(Job.Skills.Count - 8) more
+                </MudChip>
+            }
+        </div>
+    }
+
+    <!-- Expandable description -->
+    @if (!string.IsNullOrEmpty(Job.Description))
+    {
+        <div style="margin-top:8px">
+            <MudText Typo="Typo.caption" Style="color:#9E9EC8;cursor:pointer"
+                     @onclick="ToggleDescription">
+                @(_expanded ? "▲ Hide details" : "▼ Show details")
+            </MudText>
+            @if (_expanded)
+            {
+                <MudText Typo="Typo.body2" Style="color:#C0C0E0;margin-top:6px;
+                         background:#0F0F1A;padding:10px;border-radius:8px;white-space:pre-wrap">
+                    @(Job.Description.Length > 600 ? Job.Description[..600] + "…" : Job.Description)
+                </MudText>
+            }
+        </div>
+    }
+</MudPaper>
+
+@code {
+    [Parameter] public required Job Job { get; set; }
+
+    private bool _expanded;
+    private bool _hovered;
+
+    private string _accentColor => Job.ExperienceLevel switch
+    {
+        "Entry" => "#43BCCD",
+        "Mid" => "#6C63FF",
+        "Senior" => "#FF6584",
+        "Lead" => "#F7B731",
+        _ => "#6C63FF"
+    };
+
+    private string _cardStyle => $"background:#1A1A2E;border-radius:14px;border-left:4px solid {_accentColor};transition:box-shadow .2s";
+
+    private void ToggleDescription() => _expanded = !_expanded;
+}

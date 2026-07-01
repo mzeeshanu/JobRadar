@@ -1,0 +1,186 @@
+@rendermode InteractiveServer
+
+<MudDialog Style="background:#1A1A2E;border-radius:16px">
+    <TitleContent>
+        <div style="display:flex;align-items:center;gap:10px">
+            <MudIcon Icon="@Icons.Material.Filled.Business" Style="color:#6C63FF" />
+            <MudText Typo="Typo.h6" Style="color:#E0E0FF;font-weight:700">Companies Near You</MudText>
+            @if (_filtered.Count > 0)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled"
+                         Style="height:20px;font-size:.7rem">
+                    @_selected.Count selected
+                </MudChip>
+            }
+        </div>
+    </TitleContent>
+
+    <DialogContent>
+        <!-- Search + actions row -->
+        <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
+            <MudTextField @bind-Value:get="_search" @bind-Value:set="v => _search = v"
+                          Placeholder="Search companies…" Variant="Variant.Outlined" Dense="true"
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                          Immediate="true" DebounceInterval="150"
+                          Style="flex:1;min-width:180px" />
+            <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Primary"
+                       OnClick="SelectAll">Select all</MudButton>
+            <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Default"
+                       OnClick="ClearAll">Clear</MudButton>
+        </div>
+
+        <!-- Company list -->
+        <div style="max-height:420px;overflow-y:auto;display:flex;flex-direction:column;gap:6px">
+            @foreach (var company in _filtered)
+            {
+                var isChecked = _selected.Contains(company.Name);
+                var jobCount  = JobCounts.GetValueOrDefault(company.Name, 0);
+
+                <MudPaper Elevation="0"
+                          Style="@CompanyRowStyle(isChecked)"
+                          @onclick="() => Toggle(company.Name)">
+                    <div style="display:flex;align-items:center;gap:10px;padding:10px 12px">
+                        <!-- Checkbox -->
+                        <MudCheckBox Value="isChecked"
+                                     ValueChanged="(bool v) => Toggle(company.Name)"
+                                     Color="Color.Primary" Dense="true"
+                                     @onclick:stopPropagation="true" />
+
+                        <!-- Info -->
+                        <div style="flex:1;min-width:0">
+                            <MudText Typo="Typo.body1"
+                                     Style="color:#E0E0FF;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+                                @company.Name
+                            </MudText>
+                            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:2px">
+                                @if (!string.IsNullOrEmpty(company.Industry))
+                                {
+                                    <MudText Typo="Typo.caption" Style="color:#9E9EC8">@company.Industry</MudText>
+                                }
+                                @if (company.DistanceMiles.HasValue)
+                                {
+                                    <MudText Typo="Typo.caption" Style="color:#9E9EC8">
+                                        <MudIcon Icon="@Icons.Material.Filled.LocationOn" Size="Size.Small"
+                                                 Style="font-size:.75rem;vertical-align:middle" />
+                                        @company.DistanceMiles.Value.ToString("0.1") mi
+                                    </MudText>
+                                }
+                                @if (jobCount > 0)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                                             Style="color:#6C63FF;border-color:#6C63FF44;height:18px;font-size:.65rem">
+                                        @jobCount job@(jobCount == 1 ? "" : "s")
+                                    </MudChip>
+                                }
+                                else
+                                {
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                                             Style="color:#4B4B6B;border-color:#4B4B6B66;height:18px;font-size:.65rem">
+                                        no jobs yet
+                                    </MudChip>
+                                }
+                                @if (!string.IsNullOrEmpty(company.SourceProvider))
+                                {
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                                             Style="@($"color:{SourceColor(company.SourceProvider)};border-color:{SourceColor(company.SourceProvider)}55;height:18px;font-size:.6rem;padding:0 6px")">
+                                        @SourceShortName(company.SourceProvider)
+                                    </MudChip>
+                                }
+                            </div>
+                        </div>
+
+                        <!-- Website link -->
+                        @if (!string.IsNullOrEmpty(company.Website))
+                        {
+                            <MudTooltip Text="Visit website">
+                                <MudIconButton Icon="@Icons.Material.Filled.OpenInNew"
+                                               Size="Size.Small"
+                                               Style="color:#6C63FF"
+                                               Href="@company.Website"
+                                               Target="_blank"
+                                               @onclick:stopPropagation="true" />
+                            </MudTooltip>
+                        }
+                    </div>
+                </MudPaper>
+            }
+
+            @if (_filtered.Count == 0)
+            {
+                <MudText Align="Align.Center" Style="color:#9E9EC8;padding:32px">
+                    No companies match "@_search"
+                </MudText>
+            }
+        </div>
+    </DialogContent>
+
+    <DialogActions>
+        <MudText Typo="Typo.caption" Style="color:#9E9EC8;flex:1;padding-left:8px">
+            @_filtered.Count of @Companies.Count companies shown
+        </MudText>
+        <MudButton Variant="Variant.Text" OnClick="Cancel">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Apply"
+                   Style="border-radius:20px">
+            @(_selected.Count == 0 ? "Show All" : $"Show {_selected.Count} selected")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public List<Company> Companies { get; set; } = [];
+    [Parameter] public HashSet<string> Selected  { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    private HashSet<string> _selected = new(StringComparer.OrdinalIgnoreCase);
+    private string _search = string.Empty;
+
+    [Parameter] public Dictionary<string, int> JobCounts { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    private List<Company> _filtered => Companies
+        .Where(c => string.IsNullOrEmpty(_search) ||
+                    c.Name.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+                    (c.Industry ?? "").Contains(_search, StringComparison.OrdinalIgnoreCase))
+        .OrderBy(c => c.DistanceMiles ?? double.MaxValue)
+        .ToList();
+
+    protected override void OnParametersSet()
+    {
+        _selected = new HashSet<string>(Selected, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private void Toggle(string name)
+    {
+        if (!_selected.Add(name))
+            _selected.Remove(name);
+    }
+
+    private void SelectAll()
+    {
+        foreach (var c in _filtered) _selected.Add(c.Name);
+    }
+
+    private void ClearAll() => _selected.Clear();
+
+    private void Apply()  => MudDialog.Close(DialogResult.Ok(_selected));
+    private void Cancel() => MudDialog.Cancel();
+
+    private static string CompanyRowStyle(bool active) =>
+        active
+            ? "background:#6C63FF18;border:1px solid #6C63FF55;border-radius:10px;cursor:pointer;transition:all .15s"
+            : "background:#0F0F1A;border:1px solid transparent;border-radius:10px;cursor:pointer;transition:all .15s";
+
+    private static string SourceShortName(string provider) => provider switch
+    {
+        "Google Places"              => "Google",
+        "OpenStreetMap (Overpass)"   => "OSM",
+        _                            => provider.Split(' ')[0]
+    };
+
+    private static string SourceColor(string provider) => provider switch
+    {
+        "Google Places"            => "#FB923C",
+        "OpenStreetMap (Overpass)" => "#6EE7B7",
+        _                          => "#9E9EC8"
+    };
+}

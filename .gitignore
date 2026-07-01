@@ -1,0 +1,26 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+*.dbmdl
+*.jfm
+
+## SQLite
+*.db
+*.db-shm
+*.db-wal
+
+## NuGet
+packages/
+*.nupkg
+project.lock.json
+
+## OS
+.DS_Store
+Thumbs.db
+
+## IDE
+.idea/
+*.swp

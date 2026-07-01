@@ -1,0 +1,615 @@
+@page "/"
+@rendermode InteractiveServer
+@inject IJSRuntime JS
+@inject JobSearchState State
+@inject ProviderOrchestrator Orchestrator
+@inject ProviderStatusService ProviderStatus
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@implements IDisposable
+
+<PageTitle>Job Radar — Find Jobs Near You</PageTitle>
+
+<!-- ===================== HERO / IDLE STATE ===================== -->
+@if (State.Status == SearchStatus.Idle)
+{
+    <div style="text-align:center;padding:80px 24px 40px">
+        <MudText Typo="Typo.h2" Style="color:#E0E0FF;font-weight:800;margin-bottom:8px">
+            Find Jobs <span style="color:#6C63FF">Near You</span>
+        </MudText>
+        <MudText Typo="Typo.h6" Style="color:#9E9EC8;margin-bottom:40px">
+            We discover local companies and scan their career pages for openings — automatically.
+        </MudText>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Large"
+                   StartIcon="@Icons.Material.Filled.MyLocation"
+                   OnClick="StartSearch"
+                   Style="padding:16px 48px;font-size:1.1rem;font-weight:700;border-radius:50px;
+                          box-shadow:0 0 40px #6C63FF66">
+            Scan Jobs Near Me
+        </MudButton>
+
+        <MudGrid Class="mt-10" Justify="Justify.Center">
+            <MudItem xs="12" sm="4" md="3">
+                <MudPaper Elevation="4" Class="pa-6" Style="background:#1A1A2E;border-radius:16px;text-align:center">
+                    <MudIcon Icon="@Icons.Material.Filled.Business" Style="color:#6C63FF;font-size:2.5rem" />
+                    <MudText Typo="Typo.h4" Style="color:#E0E0FF;font-weight:700">—</MudText>
+                    <MudText Typo="Typo.body2" Style="color:#9E9EC8">Companies Found</MudText>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" sm="4" md="3">
+                <MudPaper Elevation="4" Class="pa-6" Style="background:#1A1A2E;border-radius:16px;text-align:center">
+                    <MudIcon Icon="@Icons.Material.Filled.Work" Style="color:#FF6584;font-size:2.5rem" />
+                    <MudText Typo="Typo.h4" Style="color:#E0E0FF;font-weight:700">—</MudText>
+                    <MudText Typo="Typo.body2" Style="color:#9E9EC8">Jobs Discovered</MudText>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" sm="4" md="3">
+                <MudPaper Elevation="4" Class="pa-6" Style="background:#1A1A2E;border-radius:16px;text-align:center">
+                    <MudIcon Icon="@Icons.Material.Filled.WifiTethering" Style="color:#43BCCD;font-size:2.5rem" />
+                    <MudText Typo="Typo.h4" Style="color:#E0E0FF;font-weight:700">—</MudText>
+                    <MudText Typo="Typo.body2" Style="color:#9E9EC8">Remote Roles</MudText>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+    </div>
+}
+
+<!-- ===================== STICKY LOADING BANNER ===================== -->
+@if (State.Status is SearchStatus.LocatingUser or SearchStatus.FindingCompanies or SearchStatus.Crawling)
+{
+    <div style="position:sticky;top:64px;z-index:100;margin-bottom:20px">
+        <MudPaper Elevation="6" Style="background:#1A1A2E;border-radius:12px;
+                  border:1px solid #6C63FF44;padding:12px 20px;
+                  display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+
+            <MudProgressCircular Color="Color.Primary" Size="Size.Small" Indeterminate="true" />
+
+            <div style="flex:1;min-width:0">
+                <MudText Typo="Typo.body2" Style="color:#E0E0FF;font-weight:600;
+                         white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+                    @State.StatusMessage
+                </MudText>
+                @if (State.Jobs.Count > 0)
+                {
+                    <MudText Typo="Typo.caption" Style="color:#6C63FF">
+                        @State.Jobs.Count jobs loaded so far
+                    </MudText>
+                }
+            </div>
+
+            @if (State.Jobs.Count > 0 || State.Companies.Count > 0)
+            {
+                <div style="display:flex;gap:12px">
+                    @if (State.Companies.Count > 0)
+                    {
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                                 Style="color:#6EE7B7;border-color:#6EE7B744">
+                            @State.Companies.Count companies
+                        </MudChip>
+                    }
+                    @if (State.Jobs.Count > 0)
+                    {
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                                 Style="color:#6C63FF;border-color:#6C63FF44">
+                            @State.Jobs.Count jobs
+                        </MudChip>
+                    }
+                </div>
+            }
+        </MudPaper>
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true"
+                           Style="border-radius:0 0 4px 4px;height:3px" />
+    </div>
+}
+
+<!-- ===================== ERROR STATE ===================== -->
+@if (State.Status == SearchStatus.Error)
+{
+    <MudAlert Severity="Severity.Error" Class="mb-6">@State.StatusMessage</MudAlert>
+    <div style="text-align:center">
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="StartSearch">Try Again</MudButton>
+    </div>
+}
+
+<!-- ===================== RESULTS ===================== -->
+@if (State.Status is SearchStatus.FindingCompanies or SearchStatus.Crawling or SearchStatus.Done
+     && (State.Jobs.Count > 0 || State.Companies.Count > 0))
+{
+    <!-- Top bar -->
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;margin-bottom:28px">
+        <div>
+            <MudText Typo="Typo.h4" Style="color:#E0E0FF;font-weight:800">
+                @(State.Jobs.Count > 0 ? $"{State.Jobs.Count} Jobs Found" : "Searching…")
+            </MudText>
+            @if (State.UserCity != null)
+            {
+                <MudText Typo="Typo.body1" Style="color:#9E9EC8">
+                    <MudIcon Icon="@Icons.Material.Filled.LocationOn" Size="Size.Small" /> @State.UserCity
+                </MudText>
+            }
+            @if (State.LastCompanyRefresh.HasValue)
+            {
+                <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
+                    @if (State.CompaniesFromCache)
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.Storage" Size="Size.Small" Style="color:#6EE7B7;font-size:.85rem" />
+                        <MudText Typo="Typo.caption" Style="color:#6EE7B7">
+                            Companies cached · last refreshed @FormatAge(State.LastCompanyRefresh.Value)
+                        </MudText>
+                    }
+                    else
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.CloudDone" Size="Size.Small" Style="color:#6C63FF;font-size:.85rem" />
+                        <MudText Typo="Typo.caption" Style="color:#6C63FF">
+                            Companies fetched live · cached for next 24 h
+                        </MudText>
+                    }
+                </div>
+            }
+        </div>
+        @if (State.Status == SearchStatus.Done)
+        {
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Refresh"
+                       OnClick="StartSearch">Rescan Area</MudButton>
+        }
+    </div>
+
+    <!-- Provider badges -->
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px;align-items:center">
+        <MudText Typo="Typo.caption" Style="color:#9E9EC8;margin-right:4px">Sources:</MudText>
+        @foreach (var p in ProviderStatus.GetAll().Where(p => p.Enabled && p.Available))
+        {
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                     Style="@($"color:{ProviderColor(p.Name)};border-color:{ProviderColor(p.Name)}44;font-size:.7rem")">
+                @p.Name
+            </MudChip>
+        }
+    </div>
+
+    <!-- Stat cards -->
+    <MudGrid Class="mb-6">
+        <MudItem xs="6" sm="3">
+            <MudPaper Elevation="4" Class="pa-4" Style="@StatCardStyle(StatCompanies)" @onclick="OnClickCompanies">
+                <MudIcon Icon="@Icons.Material.Filled.Business" Style="color:#6C63FF" />
+                <MudText Typo="Typo.h5" Style="color:#E0E0FF;font-weight:700">@State.Companies.Count</MudText>
+                <MudText Typo="Typo.caption" Style="color:#9E9EC8">Companies</MudText>
+                @if (_selectedCompanies.Count > 0)
+                {
+                    <MudText Typo="Typo.caption" Style="color:#6C63FF;font-size:.65rem">@_selectedCompanies.Count selected ✕</MudText>
+                }
+                else
+                {
+                    <MudText Typo="Typo.caption" Style="color:#6C63FF;font-size:.65rem;opacity:.7">click to filter</MudText>
+                }
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="6" sm="3">
+            <MudPaper Elevation="4" Class="pa-4" Style="@StatCardStyle(StatAll)" @onclick="OnClickAll">
+                <MudIcon Icon="@Icons.Material.Filled.Work" Style="color:#FF6584" />
+                <MudText Typo="Typo.h5" Style="color:#E0E0FF;font-weight:700">@State.Jobs.Count</MudText>
+                <MudText Typo="Typo.caption" Style="color:#9E9EC8">Total Jobs</MudText>
+                @if (_activeStatCard == StatAll)
+                {
+                    <MudText Typo="Typo.caption" Style="color:#FF6584;font-size:.65rem">all shown ✕</MudText>
+                }
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="6" sm="3">
+            <MudPaper Elevation="4" Class="pa-4" Style="@StatCardStyle(StatRemote)" @onclick="OnClickRemote">
+                <MudIcon Icon="@Icons.Material.Filled.WifiTethering" Style="color:#43BCCD" />
+                <MudText Typo="Typo.h5" Style="color:#E0E0FF;font-weight:700">@State.RemoteCount</MudText>
+                <MudText Typo="Typo.caption" Style="color:#9E9EC8">Remote</MudText>
+                @if (_activeStatCard == StatRemote)
+                {
+                    <MudText Typo="Typo.caption" Style="color:#43BCCD;font-size:.65rem">remote only ✕</MudText>
+                }
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="6" sm="3">
+            <MudPaper Elevation="4" Class="pa-4" Style="@StatCardStyle(StatTopSkill)" @onclick="OnClickTopSkill">
+                <MudIcon Icon="@Icons.Material.Filled.Code" Style="color:#F7B731" />
+                <MudText Typo="Typo.h5" Style="color:#E0E0FF;font-weight:700">@(State.SkillCounts.Keys.FirstOrDefault() ?? "—")</MudText>
+                <MudText Typo="Typo.caption" Style="color:#9E9EC8">Top Skill</MudText>
+                @if (_activeStatCard == StatTopSkill)
+                {
+                    <MudText Typo="Typo.caption" Style="color:#F7B731;font-size:.65rem">filtered ✕</MudText>
+                }
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    <!-- Charts -->
+    <MudGrid Class="mb-6">
+        <MudItem xs="12" md="7">
+            <MudPaper Elevation="4" Class="pa-4" Style="background:#1A1A2E;border-radius:16px">
+                <MudText Typo="Typo.subtitle1" Class="mb-2" Style="color:#9E9EC8;font-weight:600">
+                    <MudIcon Icon="@Icons.Material.Filled.BarChart" Size="Size.Small" Class="mr-1" />Jobs by Top Skills
+                </MudText>
+                @if (_skillSeries.Count > 0)
+                {
+                    <ApexChart TItem="SkillData" Options="_barOptions" Height="280">
+                        <ApexPointSeries TItem="SkillData"
+                                         Items="_skillSeries"
+                                         SeriesType="SeriesType.Bar"
+                                         Name="Jobs"
+                                         XValue="@(d => d.Skill)"
+                                         YValue="@(d => d.Count)" />
+                    </ApexChart>
+                }
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="5">
+            <MudPaper Elevation="4" Class="pa-4" Style="background:#1A1A2E;border-radius:16px">
+                <MudText Typo="Typo.subtitle1" Class="mb-2" Style="color:#9E9EC8;font-weight:600">
+                    <MudIcon Icon="@Icons.Material.Filled.PieChart" Size="Size.Small" Class="mr-1" />Experience Levels
+                </MudText>
+                @if (_expSeries.Count > 0)
+                {
+                    <ApexChart TItem="ExpData" Options="_donutOptions" Height="280">
+                        <ApexPointSeries TItem="ExpData"
+                                         Items="_expSeries"
+                                         SeriesType="SeriesType.Donut"
+                                         Name="Jobs"
+                                         XValue="@(d => d.Level)"
+                                         YValue="@(d => d.Count)" />
+                    </ApexChart>
+                }
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    <!-- Filters -->
+    <MudPaper Elevation="2" Class="pa-4 mb-6" Style="background:#1A1A2E;border-radius:12px">
+        <MudGrid AlignItems="AlignItems.Center">
+            <MudItem xs="12" sm="5">
+                <MudTextField @bind-Value:get="_searchText" @bind-Value:set="v => _searchText = v" Label="Search title, company, or skill…"
+                              Variant="Variant.Outlined" Dense="true"
+                              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                              Immediate="true" DebounceInterval="150"
+                              Clearable="true" />
+            </MudItem>
+            <MudItem xs="8" sm="4">
+                <MudSelect @bind-Value:get="_filterExperience" @bind-Value:set="v => _filterExperience = v" Label="Experience level"
+                           Variant="Variant.Outlined" Dense="true">
+                    <MudSelectItem Value="@("")">All Levels</MudSelectItem>
+                    <MudSelectItem Value="@("Entry")">Entry</MudSelectItem>
+                    <MudSelectItem Value="@("Mid")">Mid</MudSelectItem>
+                    <MudSelectItem Value="@("Senior")">Senior</MudSelectItem>
+                    <MudSelectItem Value="@("Lead")">Lead</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="4" sm="2">
+                <MudCheckBox T="bool" @bind-Value:get="_remoteOnly" @bind-Value:set="OnRemoteOnlyChanged" Label="Remote only" Color="Color.Primary" Dense="true" />
+            </MudItem>
+            <MudItem xs="12" sm="1">
+                <MudText Typo="Typo.caption" Style="color:#9E9EC8">@FilteredJobs.Count() results</MudText>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    <!-- Job cards -->
+    @foreach (var job in FilteredJobs)
+    {
+        <JobCard Job="job" />
+    }
+
+    @if (!FilteredJobs.Any())
+    {
+        @if (State.Status is SearchStatus.FindingCompanies or SearchStatus.Crawling)
+        {
+            <!-- Skeleton placeholders while first results are loading -->
+            @for (int i = 0; i < 4; i++)
+            {
+                <MudPaper Elevation="2" Class="pa-4 mb-3"
+                          Style="background:#1A1A2E;border-radius:14px;border-left:4px solid #2A2A4A">
+                    <MudSkeleton SkeletonType="SkeletonType.Text" Width="55%" Height="22px" Style="margin-bottom:8px" />
+                    <MudSkeleton SkeletonType="SkeletonType.Text" Width="35%" Height="16px" Style="margin-bottom:12px" />
+                    <div style="display:flex;gap:6px">
+                        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="64px" Height="22px" Style="border-radius:20px" />
+                        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="64px" Height="22px" Style="border-radius:20px" />
+                        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="64px" Height="22px" Style="border-radius:20px" />
+                    </div>
+                </MudPaper>
+            }
+        }
+        else
+        {
+            <MudText Align="Align.Center" Style="color:#9E9EC8;padding:40px">No jobs match your filters.</MudText>
+        }
+    }
+}
+
+@code {
+    private const string StatCompanies = "companies";
+    private const string StatAll       = "all";
+    private const string StatRemote    = "remote";
+    private const string StatTopSkill  = "topskill";
+
+    private string _searchText = string.Empty;
+    private string _filterExperience = string.Empty;
+    private bool _remoteOnly;
+    private string _activeStatCard = string.Empty;
+    private HashSet<string> _selectedCompanies = new(StringComparer.OrdinalIgnoreCase);
+
+    // Cancelled when the component is disposed — stops background callbacks from
+    // calling InvokeAsync on a dead circuit and crashing MudBlazor popover state.
+    private readonly CancellationTokenSource _cts = new();
+
+    private List<SkillData> _skillSeries = [];
+    private List<ExpData> _expSeries = [];
+
+    private ApexChartOptions<SkillData> _barOptions = new();
+    private ApexChartOptions<ExpData> _donutOptions = new();
+
+    private IEnumerable<Job> FilteredJobs => State.Jobs
+        .Where(j => string.IsNullOrEmpty(_searchText) ||
+                    j.Title.Contains(_searchText, StringComparison.OrdinalIgnoreCase) ||
+                    (j.Company?.Name ?? "").Contains(_searchText, StringComparison.OrdinalIgnoreCase) ||
+                    j.Skills.Any(s => s.Contains(_searchText, StringComparison.OrdinalIgnoreCase)))
+        .Where(j => string.IsNullOrEmpty(_filterExperience) || j.ExperienceLevel == _filterExperience)
+        .Where(j => !_remoteOnly || j.IsRemote)
+        .Where(j => _selectedCompanies.Count == 0 || _selectedCompanies.Contains(j.Company?.Name ?? ""));
+
+    private async void OnClickCompanies()
+    {
+        var parameters = new DialogParameters<CompanyPickerDialog>
+        {
+            { d => d.Companies,  State.Companies },
+            { d => d.Selected,   _selectedCompanies },
+            { d => d.JobCounts,  State.JobsByCompany },
+        };
+        var opts = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseButton = true };
+        var dialog = await DialogService.ShowAsync<CompanyPickerDialog>("Companies Near You", parameters, opts);
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false, Data: HashSet<string> picked })
+        {
+            _selectedCompanies = picked;
+            _activeStatCard = picked.Count > 0 ? StatCompanies : string.Empty;
+            StateHasChanged();
+        }
+    }
+
+    private void OnRemoteOnlyChanged(bool value) { _remoteOnly = value; StateHasChanged(); }
+
+    private void OnClickAll()       => ToggleStatFilter(StatAll,      () => { _filterExperience = string.Empty; _selectedCompanies.Clear(); });
+    private void OnClickRemote()    => ToggleStatFilter(StatRemote,   () => _remoteOnly = true);
+    private void OnClickTopSkill()
+    {
+        var top = State.SkillCounts.Keys.FirstOrDefault();
+        if (top != null) ToggleStatFilter(StatTopSkill, () => _searchText = top);
+    }
+
+    private void ToggleStatFilter(string card, Action apply)
+    {
+        _remoteOnly = false;
+        _searchText = string.Empty;
+        _filterExperience = string.Empty;
+        _selectedCompanies.Clear();
+
+        if (_activeStatCard == card)
+        {
+            _activeStatCard = string.Empty;
+            return;
+        }
+
+        _activeStatCard = card;
+        apply();
+    }
+
+    private string StatCardStyle(string card)
+    {
+        var isActive = _activeStatCard == card;
+        var accent = card switch
+        {
+            "companies" => "#6C63FF",
+            "all"       => "#FF6584",
+            "remote"    => "#43BCCD",
+            "topskill"  => "#F7B731",
+            _           => "#6C63FF"
+        };
+        var glow = isActive ? $"box-shadow:0 0 16px {accent}66;" : string.Empty;
+        var border = isActive ? $"border:1px solid {accent};" : "border:1px solid transparent;";
+        return $"background:#1A1A2E;border-radius:12px;text-align:center;cursor:pointer;transition:all .2s;{border}{glow}";
+    }
+
+    protected override void OnInitialized()
+    {
+        State.OnChange += OnStateChange;
+        BuildChartOptions();
+    }
+
+    private async void OnStateChange()
+    {
+        BuildChartData();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task StartSearch()
+    {
+        State.Status = SearchStatus.LocatingUser;
+        State.StatusMessage = "Getting your location…";
+        State.Jobs.Clear();
+        State.Companies.Clear();
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var loc = await JS.InvokeAsync<LocationResult>("getLocation");
+            State.UserLat = loc.Lat;
+            State.UserLng = loc.Lng;
+
+            State.Status = SearchStatus.FindingCompanies;
+            State.StatusMessage = "Searching for nearby companies…";
+            await InvokeAsync(StateHasChanged);
+
+            // Run on a background thread so the Blazor circuit stays free to re-render
+            // between batches. Each onBatch callback dispatches back via InvokeAsync.
+            await Task.Run(async () =>
+            {
+                await Orchestrator.StreamCompaniesAsync(loc.Lat, loc.Lng,
+                    onBatch: async (batch, providerName) =>
+                    {
+                        if (_cts.IsCancellationRequested) return;
+                        State.Companies.AddRange(batch);
+                        if (providerName.StartsWith("Cache:") &&
+                            DateTime.TryParse(providerName[6..], null,
+                                System.Globalization.DateTimeStyles.RoundtripKind,
+                                out var refreshed))
+                        {
+                            State.CompaniesFromCache = true;
+                            State.LastCompanyRefresh = refreshed;
+                            State.StatusMessage = $"Loaded {State.Companies.Count} companies from cache (updated {FormatAge(refreshed)})";
+                        }
+                        else
+                        {
+                            State.CompaniesFromCache = false;
+                            State.LastCompanyRefresh = DateTime.UtcNow;
+                            State.StatusMessage = $"Found {State.Companies.Count} companies via {providerName}…";
+                        }
+                        await InvokeAsync(() => { if (!_cts.IsCancellationRequested) { BuildChartData(); StateHasChanged(); } });
+                    });
+
+                await InvokeAsync(() =>
+                {
+                    State.Status = SearchStatus.Crawling;
+                    State.StatusMessage = "Fetching job listings…";
+                    StateHasChanged();
+                });
+
+                await Orchestrator.StreamJobsAsync(loc.Lat, loc.Lng,
+                    onBatch: async (batch, providerName) =>
+                    {
+                        if (_cts.IsCancellationRequested) return;
+                        State.Jobs.AddRange(batch);
+                        State.StatusMessage = $"+{batch.Count} from {providerName} · {State.Jobs.Count} total";
+                        await InvokeAsync(() => { if (!_cts.IsCancellationRequested) { BuildChartData(); StateHasChanged(); } });
+                    });
+            });
+
+            if (State.Jobs.Count == 0)
+                State.Jobs.AddRange(GetDemoJobs(State.Companies));
+
+            State.Status = SearchStatus.Done;
+            State.StatusMessage = string.Empty;
+            BuildChartData();
+            await InvokeAsync(StateHasChanged);
+
+            Snackbar.Add($"Done — {State.Jobs.Count} jobs across {State.Companies.Count} companies", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            State.Status = SearchStatus.Error;
+            State.StatusMessage = $"Could not get your location — please allow access. ({ex.Message})";
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void BuildChartData()
+    {
+        _skillSeries = State.SkillCounts.Select(kv => new SkillData(kv.Key, kv.Value)).ToList();
+        _expSeries = State.JobsByExperience.Select(kv => new ExpData(kv.Key, kv.Value)).ToList();
+    }
+
+    private void BuildChartOptions()
+    {
+        _barOptions = new ApexChartOptions<SkillData>
+        {
+            Chart = new Chart
+            {
+                Background = "transparent",
+                Toolbar = new Toolbar { Show = false },
+            },
+            Theme = new Theme { Mode = Mode.Dark },
+            PlotOptions = new PlotOptions
+            {
+                Bar = new PlotOptionsBar { Horizontal = true, BorderRadius = 4 }
+            },
+            Colors = ["#6C63FF"],
+            Grid = new Grid { BorderColor = "#2A2A4A" },
+            Tooltip = new Tooltip { Theme = ApexCharts.Mode.Dark },
+        };
+
+        _donutOptions = new ApexChartOptions<ExpData>
+        {
+            Chart = new Chart
+            {
+                Background = "transparent",
+                Toolbar = new Toolbar { Show = false },
+            },
+            Theme = new Theme { Mode = Mode.Dark },
+            Colors = ["#6C63FF", "#FF6584", "#43BCCD", "#F7B731"],
+            Tooltip = new Tooltip { Theme = ApexCharts.Mode.Dark },
+        };
+    }
+
+    private static List<Job> GetDemoJobs(List<Company> companies)
+    {
+        var demos = new (string Title, string[] Skills, string Level, bool Remote)[]
+        {
+            ("Senior Software Engineer", ["C#", ".NET", "Azure", "SQL Server"], "Senior", false),
+            ("Full Stack Developer", ["React", "TypeScript", "Node.js", "PostgreSQL"], "Mid", true),
+            ("Data Scientist", ["Python", "Machine Learning", "Pandas", "TensorFlow"], "Senior", true),
+            ("DevOps Engineer", ["Docker", "Kubernetes", "CI/CD", "AWS"], "Mid", false),
+            ("Frontend Developer", ["React", "TypeScript", "HTML/CSS"], "Entry", true),
+            ("Backend Engineer", [".NET", "C#", "Microservices", "Redis"], "Mid", false),
+            ("Cloud Architect", ["AWS", "Azure", "Terraform", "Kubernetes"], "Lead", false),
+            ("ML Engineer", ["Python", "PyTorch", "Machine Learning", "Docker"], "Senior", true),
+            ("Product Manager", ["Agile", "REST API", "SQL"], "Mid", true),
+            ("Security Engineer", ["Linux", "CI/CD", "Docker", "Python"], "Senior", false),
+        };
+
+        var jobs = new List<Job>();
+        var rng = new Random(42);
+        foreach (var (title, skills, level, remote) in demos)
+        {
+            var company = companies[rng.Next(companies.Count)];
+            jobs.Add(new Job
+            {
+                Title = title,
+                Company = company,
+                CompanyId = company.Id,
+                Skills = [.. skills],
+                ExperienceLevel = level,
+                IsRemote = remote,
+                DateFound = DateTime.UtcNow,
+                ApplyUrl = company.Website,
+                Location = remote ? "Remote" : company.Name,
+                Description = $"{title} role at {company.Name}. Required skills: {string.Join(", ", skills)}.",
+            });
+        }
+        return jobs;
+    }
+
+    private static string FormatAge(DateTime utc)
+    {
+        var age = DateTime.UtcNow - utc;
+        if (age.TotalMinutes < 2)  return "just now";
+        if (age.TotalMinutes < 60) return $"{(int)age.TotalMinutes}m ago";
+        if (age.TotalHours   < 24) return $"{(int)age.TotalHours}h ago";
+        return $"{(int)age.TotalDays}d ago";
+    }
+
+    private static string ProviderColor(string name) => name switch
+    {
+        "Remotive" => "#43BCCD",
+        "The Muse" => "#FF6584",
+        "Adzuna" => "#F7B731",
+        "Career Page Crawler" => "#A0A0FF",
+        "OpenStreetMap (Overpass)" => "#6EE7B7",
+        "Google Places" => "#FB923C",
+        _ => "#9E9EC8"
+    };
+
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+        State.OnChange -= OnStateChange;
+    }
+
+    private record LocationResult(double Lat, double Lng);
+    private record SkillData(string Skill, int Count);
+    private record ExpData(string Level, int Count);
+}
