@@ -4,10 +4,15 @@ using JobRadar.Services;
 using JobRadar.Services.Crawling;
 using JobRadar.Services.Providers;
 using JobRadar.Services.Storage;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using MudBlazor.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// ── Railway (and most PaaS hosts) inject the port to listen on via $PORT ────
+var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
+builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
@@ -55,6 +60,17 @@ builder.Services.AddSingleton<PlaywrightCrawler>();
 builder.Services.AddSingleton<JobSearchState>();
 
 var app = builder.Build();
+
+// Railway terminates TLS at its edge and forwards plain HTTP to the container,
+// so trust its proxy headers to recover the original scheme/host — otherwise
+// UseHttpsRedirection below thinks every request is already HTTP and redirect-loops.
+var forwardedHeadersOptions = new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedHost,
+};
+forwardedHeadersOptions.KnownNetworks.Clear();
+forwardedHeadersOptions.KnownProxies.Clear();
+app.UseForwardedHeaders(forwardedHeadersOptions);
 
 // Run EF Core migrations only when using SQLite
 if (storageProvider.Equals("sqlite", StringComparison.OrdinalIgnoreCase))
