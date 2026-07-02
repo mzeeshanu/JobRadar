@@ -29,11 +29,39 @@
     <script src="_content/Blazor-ApexCharts/js/blazor-apexcharts.js"></script>
     <script>
         window.getLocation = () => new Promise((resolve, reject) => {
-            if (!navigator.geolocation) { reject('Geolocation not supported'); return; }
+            console.log('[getLocation] called');
+
+            if (!navigator.geolocation) {
+                console.error('[getLocation] Geolocation API not available in this browser');
+                reject('Geolocation is not supported by your browser');
+                return;
+            }
+
             navigator.geolocation.getCurrentPosition(
-                p => resolve({ lat: p.coords.latitude, lng: p.coords.longitude }),
-                e => reject(e.message),
-                { timeout: 10000 }
+                position => {
+                    const coords = { lat: position.coords.latitude, lng: position.coords.longitude };
+                    console.log('[getLocation] success:', coords);
+                    resolve(coords);
+                },
+                error => {
+                    let message;
+                    switch (error.code) {
+                        case error.PERMISSION_DENIED:
+                            message = 'Location access was denied. Please allow location permission in your browser and try again.';
+                            break;
+                        case error.POSITION_UNAVAILABLE:
+                            message = 'Your location could not be determined. Please check your device settings and try again.';
+                            break;
+                        case error.TIMEOUT:
+                            message = 'Location request timed out. Please check your connection and try again.';
+                            break;
+                        default:
+                            message = `An unknown location error occurred (code ${error.code}): ${error.message}`;
+                    }
+                    console.error('[getLocation] error:', error.code, message);
+                    reject(message);
+                },
+                { timeout: 10000, maximumAge: 60000, enableHighAccuracy: false }
             );
         });
     </script>
