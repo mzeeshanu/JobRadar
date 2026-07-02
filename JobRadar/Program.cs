@@ -4,6 +4,7 @@ using JobRadar.Services;
 using JobRadar.Services.Crawling;
 using JobRadar.Services.Providers;
 using JobRadar.Services.Storage;
+using ApexCharts;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using MudBlazor.Services;
@@ -18,6 +19,7 @@ builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
 builder.Services.AddMudServices();
+builder.Services.AddApexCharts();
 
 // ── Storage: swap via Storage:Provider in appsettings.json ──────────────────
 var storageProvider = builder.Configuration["Storage:Provider"] ?? "sqlite";
