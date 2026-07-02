@@ -5,6 +5,11 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+    <!-- .NET 10's auto-detection of Blazor framework static assets (blazor.web.js etc.)
+         via .razor-file heuristics can miss during `dotnet publish` in Docker builds,
+         even though it works fine under `dotnet run`/VS debug. Force it on.
+         See https://github.com/dotnet/aspnetcore/issues/64381 -->
+    <RequiresAspNetWebAssets>true</RequiresAspNetWebAssets>
   </PropertyGroup>
 
   <ItemGroup>

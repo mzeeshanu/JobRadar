@@ -9,16 +9,14 @@ RUN dotnet restore JobRadar/JobRadar.csproj
 COPY JobRadar/ JobRadar/
 RUN dotnet publish JobRadar/JobRadar.csproj -c Release -o /app/publish --no-restore
 
-# In .NET 9/10 the Blazor framework files (_framework/blazor.web.js, etc.)
-# live inside the SDK's shared framework pack and are not automatically copied
-# into the publish output when targeting a self-contained=false deployment.
-# Find them under the AspNetCore App pack and copy them so the runtime image
-# has everything the browser needs to boot Blazor interactivity.
-RUN FRAMEWORK_DIR=$(find /usr/share/dotnet/packs/Microsoft.AspNetCore.App.Ref \
-        -type d -name "_framework" 2>/dev/null | head -n 1) && \
-    if [ -n "$FRAMEWORK_DIR" ]; then \
-        mkdir -p /app/publish/_framework && \
-        cp -r "$FRAMEWORK_DIR"/. /app/publish/_framework/; \
+# .NET 10 can silently omit Blazor's framework JS (blazor.web.js) from the
+# static web assets manifest during `dotnet publish` — RequiresAspNetWebAssets
+# in the csproj is the real fix (dotnet/aspnetcore#64381). Fail the build
+# loudly here instead of shipping a broken deploy if it regresses.
+RUN MANIFEST=$(find /app/publish -maxdepth 1 -iname "*.staticwebassets.endpoints.json") && \
+    if [ -z "$MANIFEST" ] || ! grep -q "blazor.web.js" "$MANIFEST"; then \
+        echo "ERROR: blazor.web.js missing from the static web assets manifest" >&2; \
+        exit 1; \
     fi
 
 # ── Runtime ───────────────────────────────────────────────────────────────
