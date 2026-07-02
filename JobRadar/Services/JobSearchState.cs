@@ -3,8 +3,11 @@ using JobRadar.Models;
 namespace JobRadar.Services;
 
 /// <summary>
-/// Singleton that holds the in-memory job search session state.
-/// Shared across all Blazor Server circuits so the crawl runs once.
+/// Scoped to the Blazor Server circuit — one instance per connected user, not shared
+/// app-wide. Location, search status, and results must stay per-visitor: a singleton
+/// here would leak one user's search results (and location) to every other visitor.
+/// The DB-backed location cache in SearchCacheService is what avoids duplicate crawls
+/// for the same coordinates across users; this class is just per-session UI state.
 /// </summary>
 public class JobSearchState
 {

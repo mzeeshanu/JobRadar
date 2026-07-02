@@ -59,7 +59,7 @@ builder.Services.AddScoped<CareerPageCrawler>();
 builder.Services.AddScoped<CompanyCrawlerService>();
 // Singleton: one Chromium process shared across all requests
 builder.Services.AddSingleton<PlaywrightCrawler>();
-builder.Services.AddSingleton<JobSearchState>();
+builder.Services.AddScoped<JobSearchState>();
 
 var app = builder.Build();
 
