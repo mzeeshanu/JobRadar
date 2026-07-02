@@ -498,10 +498,22 @@
 
             Snackbar.Add($"Done — {State.Jobs.Count} jobs across {State.Companies.Count} companies", Severity.Success);
         }
+        catch (JSException jsEx)
+        {
+            // The JS getLocation() function rejects with a human-readable string for all
+            // known error cases (permission denied, unavailable, timeout). Surface it directly.
+            State.Status = SearchStatus.Error;
+            State.StatusMessage = jsEx.Message;
+            await InvokeAsync(StateHasChanged);
+
+            // Extra snackbar hint when the user has explicitly blocked location access.
+            if (jsEx.Message.Contains("denied", StringComparison.OrdinalIgnoreCase))
+                Snackbar.Add("Tip: open your browser's site settings and allow location access, then try again.", Severity.Warning);
+        }
         catch (Exception ex)
         {
             State.Status = SearchStatus.Error;
-            State.StatusMessage = $"Could not get your location — please allow access. ({ex.Message})";
+            State.StatusMessage = $"An unexpected error occurred: {ex.Message}";
             await InvokeAsync(StateHasChanged);
         }
     }
