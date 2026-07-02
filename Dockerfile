@@ -9,6 +9,18 @@ RUN dotnet restore JobRadar/JobRadar.csproj
 COPY JobRadar/ JobRadar/
 RUN dotnet publish JobRadar/JobRadar.csproj -c Release -o /app/publish --no-restore
 
+# In .NET 9/10 the Blazor framework files (_framework/blazor.web.js, etc.)
+# live inside the SDK's shared framework pack and are not automatically copied
+# into the publish output when targeting a self-contained=false deployment.
+# Find them under the AspNetCore App pack and copy them so the runtime image
+# has everything the browser needs to boot Blazor interactivity.
+RUN FRAMEWORK_DIR=$(find /usr/share/dotnet/packs/Microsoft.AspNetCore.App.Ref \
+        -type d -name "_framework" 2>/dev/null | head -n 1) && \
+    if [ -n "$FRAMEWORK_DIR" ]; then \
+        mkdir -p /app/publish/_framework && \
+        cp -r "$FRAMEWORK_DIR"/. /app/publish/_framework/; \
+    fi
+
 # ── Runtime ───────────────────────────────────────────────────────────────
 # Playwright's own image ships Chromium + all OS deps needed for headless
 # crawling. The tag's Playwright version must match the Microsoft.Playwright
